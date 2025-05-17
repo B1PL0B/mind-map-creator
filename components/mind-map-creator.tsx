@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import ReactFlow, {
   type Node,
   addEdge,
@@ -15,18 +15,20 @@ import ReactFlow, {
   Panel,
   ReactFlowProvider,
   useReactFlow,
+  type Edge,
 } from "reactflow"
 import "reactflow/dist/style.css"
 import { toPng } from "html-to-image"
 import { jsPDF } from "jspdf"
 import { v4 as uuidv4 } from "uuid"
-import { Plus, Download, Settings, X, Trash2 } from "lucide-react"
+import { Plus, Download, Settings, X, Trash2, Undo, Redo } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import CustomNode from "./custom-node"
 
 // Node types definition
@@ -47,6 +49,12 @@ const initialNodes: Node[] = [
   },
 ]
 
+// Type for history state
+interface HistoryState {
+  nodes: Node[]
+  edges: Edge[]
+}
+
 export default function MindMapCreator() {
   return (
     <ReactFlowProvider>
@@ -64,6 +72,101 @@ function MindMapContent() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [bgColor, setBgColor] = useState("#ffffff")
   const [isExporting, setIsExporting] = useState(false)
+
+  // History state for undo/redo
+  const [history, setHistory] = useState<HistoryState[]>([{ nodes: initialNodes, edges: [] }])
+  const [historyIndex, setHistoryIndex] = useState(0)
+  const [isHistoryAction, setIsHistoryAction] = useState(false)
+
+  // Save current state to history when nodes or edges change
+  useEffect(() => {
+    if (isHistoryAction) {
+      setIsHistoryAction(false)
+      return
+    }
+
+    // Create a new history entry
+    const newHistoryState: HistoryState = {
+      nodes: nodes,
+      edges: edges,
+    }
+
+    // If we're not at the end of history, truncate it
+    const newHistory = history.slice(0, historyIndex + 1)
+
+    // Only add to history if something changed
+    if (
+      JSON.stringify(newHistoryState.nodes) !== JSON.stringify(history[historyIndex].nodes) ||
+      JSON.stringify(newHistoryState.edges) !== JSON.stringify(history[historyIndex].edges)
+    ) {
+      setHistory([...newHistory, newHistoryState])
+      setHistoryIndex(newHistory.length)
+    }
+  }, [nodes, edges])
+
+  // Undo function
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      setIsHistoryAction(true)
+      const newIndex = historyIndex - 1
+      const previousState = history[newIndex]
+
+      setNodes(previousState.nodes)
+      setEdges(previousState.edges)
+      setHistoryIndex(newIndex)
+
+      // Update selected node if it still exists in the previous state
+      if (selectedNode) {
+        const nodeStillExists = previousState.nodes.find((node) => node.id === selectedNode.id)
+        if (!nodeStillExists) {
+          setSelectedNode(null)
+        }
+      }
+    }
+  }, [history, historyIndex, setNodes, setEdges, selectedNode])
+
+  // Redo function
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      setIsHistoryAction(true)
+      const newIndex = historyIndex + 1
+      const nextState = history[newIndex]
+
+      setNodes(nextState.nodes)
+      setEdges(nextState.edges)
+      setHistoryIndex(newIndex)
+
+      // Update selected node if it still exists in the next state
+      if (selectedNode) {
+        const nodeStillExists = nextState.nodes.find((node) => node.id === selectedNode.id)
+        if (!nodeStillExists) {
+          setSelectedNode(null)
+        }
+      }
+    }
+  }, [history, historyIndex, setNodes, setEdges, selectedNode])
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Ctrl+Z (Undo)
+      if ((event.ctrlKey || event.metaKey) && event.key === "z") {
+        event.preventDefault()
+        undo()
+      }
+
+      // Check for Ctrl+Y or Ctrl+Shift+Z (Redo)
+      if ((event.ctrlKey || event.metaKey) && (event.key === "y" || (event.shiftKey && event.key === "z"))) {
+        event.preventDefault()
+        redo()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [undo, redo])
 
   // Handle connections between nodes
   const onConnect = useCallback(
@@ -303,6 +406,32 @@ function MindMapContent() {
       <header className="border-b p-4 flex justify-between items-center bg-white">
         <h1 className="text-xl font-semibold">Mind Map Creator</h1>
         <div className="flex gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={undo} variant="outline" size="sm" disabled={historyIndex <= 0}>
+                  <Undo className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Undo (Ctrl+Z)</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={redo} variant="outline" size="sm" disabled={historyIndex >= history.length - 1}>
+                  <Redo className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Redo (Ctrl+Y)</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           <Button onClick={clearCanvas} variant="outline" size="sm" className="text-red-500 hover:text-red-700">
             <Trash2 className="h-4 w-4 mr-2" />
             Clear Canvas
