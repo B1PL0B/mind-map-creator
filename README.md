@@ -2,7 +2,6 @@
 
 A clean, modern web application for creating intuitive mind maps with an iOS-inspired design. This tool allows users to visually organize their thoughts and ideas with a simple, user-friendly interface.
 
-![Mind Map Creator Screenshot](https://placeholder.svg?height=400&width=800)
 
 ## Features
 
@@ -26,21 +25,6 @@ A clean, modern web application for creating intuitive mind maps with an iOS-ins
   - Clear canvas option
   - Responsive design that works on various screen sizes
 
-## Installation
-
-\`\`\`bash
-# Clone the repository
-git clone https://github.com/yourusername/mind-map-creator.git
-
-# Navigate to the project directory
-cd mind-map-creator
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
-\`\`\`
 
 ## Usage
 
